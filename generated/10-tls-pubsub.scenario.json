@@ -1,0 +1,55 @@
+{
+  "id": "10-tls-pubsub",
+  "title": "TLS下订阅链路验证",
+  "objective": "验证 HTTPS 查询与 WSS 订阅在 TLS 场景下同时可用且稳定",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": true,
+    "tls_ws": true
+  },
+  "fault": {
+    "type": "none",
+    "selector": "none",
+    "params": {}
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 50,
+    "ws_subscriptions": 200
+  },
+  "duration": "10m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "pubsub_drop_rate",
+      "op": "<=",
+      "value": 0.2
+    },
+    {
+      "metric": "tls_handshake_error_rate",
+      "op": "<=",
+      "value": 1
+    }
+  ],
+  "observe": [
+    "rpc_success_rate",
+    "pubsub_drop_rate",
+    "tls_handshake_error_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms"
+  ],
+  "schema_version": "v1"
+}

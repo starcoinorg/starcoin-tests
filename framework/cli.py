@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .compiler import write_compiled_outputs
 from .runtime import run_integrated_scenario
+from .runtime import run_remote_scenario
 from .translator import load_intent
 
 
@@ -71,23 +72,45 @@ def _cmd_run(args: argparse.Namespace) -> int:
     base_port = int(args.base_port)
     node1_http = base_port + 150
     node1_ws = base_port + 170
+    remote_mode = bool(args.http_target or args.ws_target)
+    if (intent.scope.tls_http or intent.scope.tls_ws) and not remote_mode:
+        print(
+            "ERR TLS intent requires --http-target and --ws-target because the local Starcoin binary runner does not expose HTTPS/WSS endpoints."
+        )
+        return 1
+
+    http_target = args.http_target or f"http://127.0.0.1:{node1_http}"
+    ws_target = args.ws_target or f"ws://127.0.0.1:{node1_ws}"
 
     out = write_compiled_outputs(
         out_dir=generated_dir,
         intent=intent,
-        http_target=f"http://127.0.0.1:{node1_http}",
-        ws_target=f"ws://127.0.0.1:{node1_ws}",
+        http_target=http_target,
+        ws_target=ws_target,
     )
 
-    summary = run_integrated_scenario(
-        intent=intent,
-        starcoin_bin=args.starcoin_bin,
-        run_dir=run_dir,
-        node_count=node_count,
-        base_port=base_port,
-        artillery_config_path=out["artillery"],
-        skip_artillery=bool(args.skip_artillery),
-    )
+    if remote_mode:
+        summary = run_remote_scenario(
+            intent=intent,
+            run_dir=run_dir,
+            http_target=http_target,
+            ws_target=ws_target,
+            artillery_config_path=out["artillery"],
+            skip_artillery=bool(args.skip_artillery),
+            duration_override_seconds=args.duration_override,
+            insecure_tls=bool(args.tls_insecure),
+        )
+    else:
+        summary = run_integrated_scenario(
+            intent=intent,
+            starcoin_bin=args.starcoin_bin,
+            run_dir=run_dir,
+            node_count=node_count,
+            base_port=base_port,
+            artillery_config_path=out["artillery"],
+            skip_artillery=bool(args.skip_artillery),
+            duration_override_seconds=args.duration_override,
+        )
 
     summary_path = run_dir / "run-summary.json"
     summary_path.write_text(
@@ -141,6 +164,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--base-port", type=int, default=26000)
     run_cmd.add_argument("--node-count", type=int, default=None)
     run_cmd.add_argument("--fault-duration", type=int, default=None)
+    run_cmd.add_argument("--duration-override", type=int, default=None)
+    run_cmd.add_argument("--http-target", default=None)
+    run_cmd.add_argument("--ws-target", default=None)
+    run_cmd.add_argument("--tls-insecure", action="store_true")
     run_cmd.add_argument("--skip-artillery", action="store_true")
     run_cmd.set_defaults(func=_cmd_run)
 

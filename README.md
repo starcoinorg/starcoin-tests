@@ -61,7 +61,13 @@ python3 -m framework.cli compile intents/02-node-down.md --out-dir generated \
 python3 -m framework.cli run intents/02-node-down.md \
   --starcoin-bin /Users/simon/starcoin-projects/starcoin/target/debug/starcoin \
   --base-port 26000 \
+  --duration-override 60 \
   --fault-duration 30
+
+python3 -m framework.cli run intents/10-tls-pubsub.md \
+  --http-target https://rpc.example.com \
+  --ws-target wss://rpc.example.com/ws \
+  --duration-override 60
 
 # wrapper script
 ./scripts/run_intent.sh intents/02-node-down.md --node-count 2 --fault-duration 20
@@ -76,12 +82,32 @@ python3 -m framework.cli run intents/02-node-down.md \
 3. Run fault injection (`node_down` / `node_restart` / `network_partition`).
 4. Run Artillery load test (if installed).
 5. Collect pre/post snapshots through both JSON-RPC and `starcoin` CLI commands.
+6. Run a dedicated PubSub probe for event delivery, disconnect, and reconnect metrics.
+
+For TLS scenarios, use remote target mode instead of the local binary runner:
+
+1. The local Starcoin binary runner does not expose HTTPS/WSS endpoints.
+2. Pass `--http-target` and `--ws-target` to run against an existing TLS-enabled deployment.
+3. Add `--tls-insecure` only when you intentionally want to bypass certificate validation in a test environment.
+
+Useful for faster local iteration:
+
+```bash
+python3 -m framework.cli run intents/09-pubsub-reconnect.md \
+  --starcoin-bin /Users/simon/starcoin-projects/starcoin/target/debug/starcoin \
+  --base-port 48000 \
+  --node-count 2 \
+  --fault-duration 8 \
+  --duration-override 30 \
+  --skip-artillery
+```
 
 Run outputs:
 
 - `runs/<timestamp>-<intent-id>/generated/*.json`
 - `runs/<timestamp>-<intent-id>/snapshots/pre/*`
 - `runs/<timestamp>-<intent-id>/snapshots/post/*`
+- `runs/<timestamp>-<intent-id>/pubsub-probe.json`
 - `runs/<timestamp>-<intent-id>/run-summary.json`
 
 ## Notes
@@ -93,3 +119,6 @@ Run outputs:
    - Linux uses `tc netem`
    - macOS uses `dnctl + pfctl`
    Both require root privileges.
+5. PubSub metrics prefer `pubsub-probe.json` over Artillery summary heuristics when available.
+6. `pubsub-probe.json` separates transient reconnect noise from unexpected probe errors so restart scenarios stay readable.
+7. Remote target mode requires the target chain itself to progress; otherwise `chain_progress` will fail even if transport setup is healthy.

@@ -29,3 +29,7 @@ Notes:
 5. `rpc_rate_limit` is not implemented yet in local runner.
 6. For CI/local dev, prefer binary mode with explicit port range (`--base-port`).
 7. Use `./scripts/prepare_env.sh` to check/install Linux/macOS prerequisites before running scenarios.
+8. TLS scenarios use remote target mode:
+   - `python3 -m framework.cli run intents/10-tls-pubsub.md --http-target https://... --ws-target wss://...`
+   - local binary mode cannot expose HTTPS/WSS directly
+   - add `--tls-insecure` only for self-signed test environments

@@ -66,15 +66,19 @@ def _parse_scope(scope_text: str) -> Scope:
 def _parse_fault(fault_text: str, params_text: str) -> Fault:
     ft = fault_text.strip()
     params = params_text.strip()
-
-    if ft in {"无", "none", "无扰动"}:
-        return Fault(type="none", selector="none", params={})
-
-    selector = "random" if "随机" in params else "node-1"
     data: dict[str, object] = {}
 
     if "持续" in params:
         data["duration_seconds"] = _parse_duration_to_seconds(params)
+
+    add_nodes_match = re.search(r"新增\s*(\d+)\s*节点", params)
+    if add_nodes_match:
+        data["add_nodes"] = int(add_nodes_match.group(1))
+
+    if ft in {"无", "none", "无扰动"}:
+        return Fault(type="none", selector="none", params=data)
+
+    selector = "random" if "随机" in params else "node-1"
 
     delay_match = re.search(r"(\d+)\s*ms", params, re.IGNORECASE)
     if delay_match:

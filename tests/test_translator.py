@@ -33,6 +33,11 @@ class TranslatorTest(unittest.TestCase):
         self.assertEqual(loss.params.get("loss_percent"), 5.0)
         self.assertEqual(loss.params.get("duration_seconds"), 60)
 
+    def test_parse_fault_none_keeps_scale_out_params(self) -> None:
+        fault = _parse_fault("无", "测试期间新增2节点")
+        self.assertEqual(fault.type, "none")
+        self.assertEqual(fault.params.get("add_nodes"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

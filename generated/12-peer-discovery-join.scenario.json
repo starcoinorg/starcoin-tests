@@ -1,0 +1,57 @@
+{
+  "id": "12-peer-discovery-join",
+  "title": "新节点加入发现收敛",
+  "objective": "验证新节点加入测试网络后能够被发现并在限定时间内建立连接",
+  "scope": {
+    "nodes": 6,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "none",
+    "selector": "none",
+    "params": {
+      "add_nodes": 2
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 30,
+    "ws_subscriptions": 60
+  },
+  "duration": "15m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "peer_discovery_seconds",
+      "op": "<=",
+      "value": 120
+    },
+    {
+      "metric": "peer_count_after_recovery",
+      "op": ">=",
+      "value": 3
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "peer_discovery_seconds",
+    "rpc_success_rate",
+    "rpc_p95_ms"
+  ],
+  "schema_version": "v1"
+}

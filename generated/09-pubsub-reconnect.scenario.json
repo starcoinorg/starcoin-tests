@@ -1,0 +1,59 @@
+{
+  "id": "09-pubsub-reconnect",
+  "title": "PubSub重连恢复",
+  "objective": "验证 websocket 连接中断并恢复后订阅能够重新建立且事件链路正常",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "node_restart",
+    "selector": "random",
+    "params": {
+      "duration_seconds": 60,
+      "count": 1
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 40,
+    "ws_subscriptions": 300
+  },
+  "duration": "12m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "pubsub_drop_rate",
+      "op": "<=",
+      "value": 0.5
+    },
+    {
+      "metric": "reconnect_success_rate",
+      "op": ">=",
+      "value": 99
+    }
+  ],
+  "observe": [
+    "height",
+    "rpc_success_rate",
+    "pubsub_drop_rate",
+    "reconnect_success_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms"
+  ],
+  "schema_version": "v1"
+}
