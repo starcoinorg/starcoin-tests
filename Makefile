@@ -1,4 +1,4 @@
-.PHONY: test validate compile-all list run-node-down
+.PHONY: test validate compile-all list run-node-down prepare-env
 
 test:
 	python3 -m unittest discover -s tests -p 'test_*.py'
@@ -18,3 +18,6 @@ run-node-down:
 		--base-port 26000 \
 		--node-count 2 \
 		--fault-duration 20
+
+prepare-env:
+	./scripts/prepare_env.sh --check-only

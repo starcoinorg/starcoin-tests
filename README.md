@@ -26,9 +26,30 @@ The framework parses this intent and generates:
 
 ```bash
 cd starcoin-nettest
+./scripts/prepare_env.sh --check-only
 python3 -m framework.cli validate intents/*.md
 python3 -m framework.cli compile-all --intent-dir intents --out-dir generated
 ```
+
+## Environment Preparation (Linux/macOS)
+
+Use the built-in script to check or install prerequisites:
+
+```bash
+# check only (safe default)
+./scripts/prepare_env.sh --check-only
+
+# auto install missing packages where possible
+./scripts/prepare_env.sh --install --yes
+```
+
+The script detects OS and prepares:
+
+1. Common tools: `python3`, `node`, `npm`, `artillery`
+2. Network fault backend:
+   - Linux: `tc` (`iproute2`)
+   - macOS: `dnctl + pfctl`
+3. Starcoin binary existence (`--starcoin-bin` optional)
 
 ## Commands
 
@@ -68,4 +89,7 @@ Run outputs:
 1. Generated Artillery config is scaffold-level and can be extended by QA.
 2. Chaos script is a plan template; adapt stop/start commands to your node orchestration.
 3. Keep `intents/*.md` as source of truth for test evolution.
-4. `net_delay`/`net_loss` in integrated runner require `tc netem` and root privileges.
+4. `net_delay`/`net_loss` in integrated runner are OS-aware:
+   - Linux uses `tc netem`
+   - macOS uses `dnctl + pfctl`
+   Both require root privileges.

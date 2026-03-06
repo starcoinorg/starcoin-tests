@@ -22,6 +22,10 @@ Notes:
 
 1. Current local runner supports `none`, `node_down`, `node_restart`, `network_partition`.
 2. `network_partition` prefers `network_manager.ban_peer`; if api is unavailable, fallback to stop/restart half cluster.
-3. `net_delay`/`net_loss` try `tc netem` on `lo`; requires Linux + root privileges.
-4. `rpc_rate_limit` is not implemented yet in local runner.
-5. For CI/local dev, prefer binary mode with explicit port range (`--base-port`).
+3. `net_delay`/`net_loss` select backend by OS:
+   - Linux: `tc netem` on `lo`.
+   - macOS: `dnctl + pfctl` (dummynet) on `lo0`.
+4. Both Linux/macOS backends require root privileges.
+5. `rpc_rate_limit` is not implemented yet in local runner.
+6. For CI/local dev, prefer binary mode with explicit port range (`--base-port`).
+7. Use `./scripts/prepare_env.sh` to check/install Linux/macOS prerequisites before running scenarios.

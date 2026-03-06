@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import threading
@@ -220,42 +221,146 @@ def _detect_tc() -> str | None:
     return None
 
 
-def _run_tc_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_cmd(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
-def _apply_netem(rule: str, duration: int) -> dict[str, Any]:
+def _apply_linux_netem(rule: str, duration: int) -> dict[str, Any]:
     tc_bin = _detect_tc()
     if tc_bin is None:
         return {
             "status": "unsupported",
             "detail": "tc netem not found in PATH, cannot inject net_delay/net_loss",
+            "backend": "linux:tc",
         }
 
     if os.geteuid() != 0:
         return {
             "status": "unsupported",
             "detail": "tc netem requires root privileges; run as root or with sudo wrapper",
+            "backend": "linux:tc",
         }
 
     iface = "lo"
     add_cmd = [tc_bin, "qdisc", "replace", "dev", iface, "root", "netem", *rule.split()]
     del_cmd = [tc_bin, "qdisc", "del", "dev", iface, "root"]
-    add = _run_tc_cmd(add_cmd)
+    add = _run_cmd(add_cmd)
     if add.returncode != 0:
         return {
             "status": "failed",
             "detail": f"failed to apply netem: {add.stderr.strip() or add.stdout.strip()}",
+            "backend": "linux:tc",
         }
 
     time.sleep(duration)
-    cleanup = _run_tc_cmd(del_cmd)
+    cleanup = _run_cmd(del_cmd)
     if cleanup.returncode != 0:
         return {
             "status": "failed",
             "detail": f"netem cleanup failed: {cleanup.stderr.strip() or cleanup.stdout.strip()}",
+            "backend": "linux:tc",
         }
-    return {"status": "ok", "detail": f"netem applied on {iface}: {rule} for {duration}s"}
+    return {
+        "status": "ok",
+        "detail": f"netem applied on {iface}: {rule} for {duration}s",
+        "backend": "linux:tc",
+    }
+
+
+def _apply_macos_dummynet(rule: str, duration: int) -> dict[str, Any]:
+    dnctl_bin = shutil.which("dnctl")
+    pfctl_bin = shutil.which("pfctl")
+    if not dnctl_bin or not pfctl_bin:
+        return {
+            "status": "unsupported",
+            "detail": "dnctl/pfctl not found, cannot inject net_delay/net_loss on macOS",
+            "backend": "darwin:dnctl+pfctl",
+        }
+    if os.geteuid() != 0:
+        return {
+            "status": "unsupported",
+            "detail": "dnctl/pfctl requires root privileges on macOS",
+            "backend": "darwin:dnctl+pfctl",
+        }
+
+    anchor = "com.apple/starcoin_nettest"
+    pipe_id = "1"
+    iface = "lo0"
+
+    cfg_cmd = [dnctl_bin, "pipe", pipe_id, "config", *rule.split()]
+    cfg = _run_cmd(cfg_cmd)
+    if cfg.returncode != 0:
+        return {
+            "status": "failed",
+            "detail": f"dnctl config failed: {cfg.stderr.strip() or cfg.stdout.strip()}",
+            "backend": "darwin:dnctl+pfctl",
+        }
+
+    enable_pf = _run_cmd([pfctl_bin, "-E"])
+    if enable_pf.returncode != 0:
+        _run_cmd([dnctl_bin, "-q", "flush"])
+        return {
+            "status": "failed",
+            "detail": f"pfctl enable failed: {enable_pf.stderr.strip() or enable_pf.stdout.strip()}",
+            "backend": "darwin:dnctl+pfctl",
+        }
+
+    rules = "\n".join(
+        [
+            f"dummynet in quick on {iface} all pipe {pipe_id}",
+            f"dummynet out quick on {iface} all pipe {pipe_id}",
+            "",
+        ]
+    )
+    load = subprocess.run(
+        [pfctl_bin, "-a", anchor, "-f", "-"],
+        input=rules,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if load.returncode != 0:
+        _run_cmd([pfctl_bin, "-a", anchor, "-F", "all"])
+        _run_cmd([dnctl_bin, "-q", "flush"])
+        return {
+            "status": "failed",
+            "detail": f"pfctl anchor load failed: {load.stderr.strip() or load.stdout.strip()}",
+            "backend": "darwin:dnctl+pfctl",
+        }
+
+    time.sleep(duration)
+
+    cleanup_pf = _run_cmd([pfctl_bin, "-a", anchor, "-F", "all"])
+    cleanup_dn = _run_cmd([dnctl_bin, "-q", "flush"])
+    if cleanup_pf.returncode != 0 or cleanup_dn.returncode != 0:
+        detail = []
+        if cleanup_pf.returncode != 0:
+            detail.append(cleanup_pf.stderr.strip() or cleanup_pf.stdout.strip())
+        if cleanup_dn.returncode != 0:
+            detail.append(cleanup_dn.stderr.strip() or cleanup_dn.stdout.strip())
+        return {
+            "status": "failed",
+            "detail": f"cleanup failed: {'; '.join([d for d in detail if d])}",
+            "backend": "darwin:dnctl+pfctl",
+        }
+    return {
+        "status": "ok",
+        "detail": f"dummynet applied on {iface}: {rule} for {duration}s",
+        "backend": "darwin:dnctl+pfctl",
+    }
+
+
+def _apply_network_impairment(rule: str, duration: int) -> dict[str, Any]:
+    system = platform.system().lower()
+    if system == "linux":
+        return _apply_linux_netem(rule, duration)
+    if system == "darwin":
+        return _apply_macos_dummynet(rule, duration)
+    return {
+        "status": "unsupported",
+        "detail": f"unsupported OS `{platform.system()}` for net_delay/net_loss injection",
+        "backend": f"{system}:none",
+    }
 
 
 def run_starcoin_command(
@@ -407,7 +512,7 @@ def run_fault_injection(cluster: StarcoinCluster, intent: IntentScenario) -> dic
     if fault == "net_delay":
         delay_ms = int(params.get("delay_ms", 120))
         rule = f"delay {delay_ms}ms"
-        netem = _apply_netem(rule=rule, duration=duration)
+        netem = _apply_network_impairment(rule=rule, duration=duration)
         result.update(netem)
         result["detail"] = netem.get("detail", "")
         return result
@@ -415,7 +520,7 @@ def run_fault_injection(cluster: StarcoinCluster, intent: IntentScenario) -> dic
     if fault == "net_loss":
         loss_percent = float(params.get("loss_percent", 10))
         rule = f"loss {loss_percent}%"
-        netem = _apply_netem(rule=rule, duration=duration)
+        netem = _apply_network_impairment(rule=rule, duration=duration)
         result.update(netem)
         result["detail"] = netem.get("detail", "")
         return result
