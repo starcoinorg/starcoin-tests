@@ -1,0 +1,49 @@
+{
+  "id": "05-tls-rpc",
+  "title": "TLS链路能力验证",
+  "objective": "验证HTTPS/WSS链路在升级后可用且性能可接受",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": true,
+    "tls_ws": true
+  },
+  "fault": {
+    "type": "none",
+    "selector": "none",
+    "params": {}
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 0,
+    "ws_subscriptions": 0
+  },
+  "duration": "10m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "pubsub_drop_rate",
+      "op": "<=",
+      "value": 0.2
+    }
+  ],
+  "observe": [
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "tls_handshake_error_rate",
+    "pubsub_drop_rate"
+  ],
+  "schema_version": "v1"
+}

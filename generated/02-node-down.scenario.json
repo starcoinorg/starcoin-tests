@@ -1,0 +1,65 @@
+{
+  "id": "02-node-down",
+  "title": "单节点失效网络可用性",
+  "objective": "验证1个节点失效后网络仍正常运行",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "node_down",
+    "selector": "random",
+    "params": {
+      "duration_seconds": 300,
+      "count": 1
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 100,
+    "ws_subscriptions": 200
+  },
+  "duration": "15m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "peer_recovery_seconds",
+      "op": "<=",
+      "value": 120
+    },
+    {
+      "metric": "peer_count_after_recovery",
+      "op": ">=",
+      "value": 2
+    },
+    {
+      "metric": "pubsub_drop_rate",
+      "op": "<=",
+      "value": 0.1
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "sync_lag",
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms",
+    "pubsub_drop_rate"
+  ],
+  "schema_version": "v1"
+}

@@ -1,0 +1,58 @@
+{
+  "id": "03-node-restart",
+  "title": "单节点重启恢复性",
+  "objective": "验证节点重启后可重新入网并完成同步",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "node_restart",
+    "selector": "random",
+    "params": {
+      "duration_seconds": 120,
+      "count": 1
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 80,
+    "ws_subscriptions": 120
+  },
+  "duration": "12m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "peer_recovery_seconds",
+      "op": "<=",
+      "value": 180
+    },
+    {
+      "metric": "peer_count_after_recovery",
+      "op": ">=",
+      "value": 2
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "sync_lag",
+    "rpc_success_rate",
+    "rpc_p95_ms"
+  ],
+  "schema_version": "v1"
+}

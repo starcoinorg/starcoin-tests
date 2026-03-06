@@ -1,0 +1,58 @@
+{
+  "id": "04-network-partition",
+  "title": "网络分区恢复",
+  "objective": "验证网络分区后能够重新收敛并持续出块",
+  "scope": {
+    "nodes": 6,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "network_partition",
+    "selector": "random",
+    "params": {
+      "duration_seconds": 180
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 120,
+    "ws_subscriptions": 150
+  },
+  "duration": "20m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 98.0
+    },
+    {
+      "metric": "peer_recovery_seconds",
+      "op": "<=",
+      "value": 300
+    },
+    {
+      "metric": "peer_count_after_recovery",
+      "op": ">=",
+      "value": 3
+    }
+  ],
+  "observe": [
+    "height",
+    "fork_depth",
+    "peer_count",
+    "sync_lag",
+    "rpc_success_rate",
+    "rpc_p95_ms"
+  ],
+  "schema_version": "v1"
+}

@@ -1,0 +1,52 @@
+{
+  "id": "06-soak",
+  "title": "长稳运行回归",
+  "objective": "验证长时间运行下资源和错误率无异常漂移",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "none",
+    "selector": "none",
+    "params": {}
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 50,
+    "ws_subscriptions": 80
+  },
+  "duration": "6h",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "error_rate",
+      "op": "<=",
+      "value": 1
+    }
+  ],
+  "observe": [
+    "height",
+    "memory_rss_mb",
+    "fd_count",
+    "peer_count",
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms"
+  ],
+  "schema_version": "v1"
+}

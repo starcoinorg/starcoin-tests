@@ -1,0 +1,58 @@
+{
+  "config": {
+    "target": "http://127.0.0.1:9850",
+    "phases": [
+      {
+        "name": "warmup",
+        "duration": 60,
+        "arrivalRate": 12
+      },
+      {
+        "name": "steady",
+        "duration": 1140,
+        "arrivalRate": 120
+      }
+    ],
+    "defaults": {
+      "headers": {
+        "content-type": "application/json"
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "name": "rpc_http_chain_info",
+      "flow": [
+        {
+          "post": {
+            "url": "/",
+            "json": {
+              "jsonrpc": "2.0",
+              "method": "chain.info",
+              "params": [],
+              "id": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc_ws_subscribe",
+      "engine": "ws",
+      "flow": [
+        {
+          "connect": "ws://127.0.0.1:9870"
+        },
+        {
+          "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"starcoin_subscribe\",\"params\":[[\"newHeads\"]]}"
+        },
+        {
+          "think": 5
+        },
+        {
+          "send": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"starcoin_unsubscribe\",\"params\":[1]}"
+        }
+      ]
+    }
+  ]
+}

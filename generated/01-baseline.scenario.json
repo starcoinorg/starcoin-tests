@@ -1,0 +1,50 @@
+{
+  "id": "01-baseline",
+  "title": "多节点基线可用性",
+  "objective": "验证无扰动场景下网络与RPC基础能力稳定",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "none",
+    "selector": "none",
+    "params": {}
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 80,
+    "ws_subscriptions": 100
+  },
+  "duration": "10m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 99.0
+    },
+    {
+      "metric": "pubsub_drop_rate",
+      "op": "<=",
+      "value": 0.1
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "pubsub_drop_rate"
+  ],
+  "schema_version": "v1"
+}

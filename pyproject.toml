@@ -1,0 +1,18 @@
+[project]
+name = "starcoin-nettest"
+version = "0.1.0"
+description = "Text intent driven network test framework for Starcoin"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Starcoin Team" }]
+dependencies = []
+
+[project.scripts]
+starcoin-nettest = "framework.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["framework"]
