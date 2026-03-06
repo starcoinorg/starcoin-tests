@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
+from datetime import datetime
 
 from .compiler import write_compiled_outputs
+from .runtime import run_integrated_scenario
 from .translator import load_intent
 
 
@@ -53,6 +56,52 @@ def _cmd_compile_all(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run(args: argparse.Namespace) -> int:
+    intent_path = Path(args.intent_file)
+    intent = load_intent(intent_path)
+    if args.fault_duration is not None:
+        intent.fault.params["duration_seconds"] = int(args.fault_duration)
+    node_count = int(args.node_count or intent.scope.nodes)
+
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(args.run_dir) / f"{run_id}-{intent.id}"
+    generated_dir = run_dir / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+
+    base_port = int(args.base_port)
+    node1_http = base_port + 150
+    node1_ws = base_port + 170
+
+    out = write_compiled_outputs(
+        out_dir=generated_dir,
+        intent=intent,
+        http_target=f"http://127.0.0.1:{node1_http}",
+        ws_target=f"ws://127.0.0.1:{node1_ws}",
+    )
+
+    summary = run_integrated_scenario(
+        intent=intent,
+        starcoin_bin=args.starcoin_bin,
+        run_dir=run_dir,
+        node_count=node_count,
+        base_port=base_port,
+        artillery_config_path=out["artillery"],
+        skip_artillery=bool(args.skip_artillery),
+    )
+
+    summary_path = run_dir / "run-summary.json"
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+    print(f"RUN_DIR {run_dir}")
+    print(f"SUMMARY {summary_path}")
+    print(f"STATUS {summary.get('status')}")
+    if summary.get("status") != "ok":
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="starcoin nettest intent framework")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -78,6 +127,22 @@ def build_parser() -> argparse.ArgumentParser:
     compile_all_cmd.add_argument("--http-target", default="http://127.0.0.1:9850")
     compile_all_cmd.add_argument("--ws-target", default="ws://127.0.0.1:9870")
     compile_all_cmd.set_defaults(func=_cmd_compile_all)
+
+    run_cmd = sub.add_parser(
+        "run",
+        help="run one intent end-to-end with local starcoin binary cluster",
+    )
+    run_cmd.add_argument("intent_file")
+    run_cmd.add_argument(
+        "--starcoin-bin",
+        default="/Users/simon/starcoin-projects/starcoin/target/debug/starcoin",
+    )
+    run_cmd.add_argument("--run-dir", default="runs")
+    run_cmd.add_argument("--base-port", type=int, default=26000)
+    run_cmd.add_argument("--node-count", type=int, default=None)
+    run_cmd.add_argument("--fault-duration", type=int, default=None)
+    run_cmd.add_argument("--skip-artillery", action="store_true")
+    run_cmd.set_defaults(func=_cmd_run)
 
     return parser
 

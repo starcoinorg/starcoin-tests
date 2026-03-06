@@ -5,12 +5,12 @@
       {
         "name": "warmup",
         "duration": 60,
-        "arrivalRate": 6
+        "arrivalRate": 8
       },
       {
         "name": "steady",
-        "duration": 540,
-        "arrivalRate": 60
+        "duration": 660,
+        "arrivalRate": 80
       }
     ],
     "defaults": {

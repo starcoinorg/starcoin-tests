@@ -1,0 +1,48 @@
+{
+  "id": "07-net-delay",
+  "title": "网络高延迟回归",
+  "objective": "验证网络高延迟情况下功能和性能退化在可控范围",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "net_delay",
+    "selector": "node-1",
+    "params": {
+      "duration_seconds": 90,
+      "delay_ms": 120
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 80,
+    "ws_subscriptions": 120
+  },
+  "duration": "12m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 98.0
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms"
+  ],
+  "schema_version": "v1"
+}

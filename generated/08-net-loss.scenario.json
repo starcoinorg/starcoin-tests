@@ -1,0 +1,48 @@
+{
+  "id": "08-net-loss",
+  "title": "网络丢包回归",
+  "objective": "验证网络丢包情况下节点连通和RPC能力",
+  "scope": {
+    "nodes": 4,
+    "network": "dev",
+    "tls_http": false,
+    "tls_ws": false
+  },
+  "fault": {
+    "type": "net_loss",
+    "selector": "node-1",
+    "params": {
+      "duration_seconds": 90,
+      "loss_percent": 10.0
+    }
+  },
+  "traffic": {
+    "transports": [
+      "http",
+      "ws"
+    ],
+    "http_qps": 80,
+    "ws_subscriptions": 120
+  },
+  "duration": "12m",
+  "thresholds": [
+    {
+      "metric": "chain_progress",
+      "op": "==",
+      "value": true
+    },
+    {
+      "metric": "rpc_success_rate",
+      "op": ">=",
+      "value": 97.0
+    }
+  ],
+  "observe": [
+    "height",
+    "peer_count",
+    "rpc_success_rate",
+    "rpc_p95_ms",
+    "rpc_p99_ms"
+  ],
+  "schema_version": "v1"
+}

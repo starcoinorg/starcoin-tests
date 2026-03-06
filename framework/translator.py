@@ -76,6 +76,14 @@ def _parse_fault(fault_text: str, params_text: str) -> Fault:
     if "持续" in params:
         data["duration_seconds"] = _parse_duration_to_seconds(params)
 
+    delay_match = re.search(r"(\d+)\s*ms", params, re.IGNORECASE)
+    if delay_match:
+        data["delay_ms"] = int(delay_match.group(1))
+
+    loss_match = re.search(r"(\d+(?:\.\d+)?)\s*%", params)
+    if loss_match:
+        data["loss_percent"] = float(loss_match.group(1))
+
     count_match = re.search(r"(\d+)\s*节点", params)
     if count_match:
         data["count"] = int(count_match.group(1))
@@ -103,12 +111,12 @@ def _parse_traffic(traffic_text: str) -> Traffic:
     http_qps = 0
     ws_subscriptions = 0
 
-    m = re.search(r"http\s*(\d+)\s*qps", traffic_text, re.IGNORECASE)
+    m = re.search(r"https?\s*(\d+)\s*qps", traffic_text, re.IGNORECASE)
     if m:
         http_qps = int(m.group(1))
         transports.append("http")
 
-    m = re.search(r"ws\s*(\d+)\s*订阅", traffic_text, re.IGNORECASE)
+    m = re.search(r"wss?\s*(\d+)\s*订阅", traffic_text, re.IGNORECASE)
     if m:
         ws_subscriptions = int(m.group(1))
         transports.append("ws")
