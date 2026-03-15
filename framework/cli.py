@@ -6,8 +6,7 @@ from pathlib import Path
 from datetime import datetime
 
 from .compiler import write_compiled_outputs
-from .runtime import _default_docker_http_targets
-from .runtime import _default_docker_ws_targets
+from .runtime import infer_compose_published_targets
 from .runtime import run_docker_scenario
 from .runtime import run_integrated_scenario
 from .runtime import run_remote_scenario
@@ -139,14 +138,41 @@ def _cmd_run_docker(args: argparse.Namespace) -> int:
     generated_dir = run_dir / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
 
-    http_targets = args.http_target or _default_docker_http_targets(
-        int(args.node_count or intent.scope.nodes),
-        base_port=int(args.http_base_port),
-    )
-    ws_targets = args.ws_target or _default_docker_ws_targets(
-        int(args.node_count or intent.scope.nodes),
-        base_port=int(args.ws_base_port),
-    )
+    expected_node_count = int(args.node_count or intent.scope.nodes)
+    compose_file = Path(args.compose_file)
+
+    if bool(args.http_target) != bool(args.ws_target):
+        print("ERR docker run requires both --http-target and --ws-target when overriding endpoints.")
+        return 1
+
+    if args.http_target:
+        http_targets = list(args.http_target)
+        ws_targets = list(args.ws_target)
+    else:
+        http_targets, ws_targets = infer_compose_published_targets(compose_file)
+        if not http_targets or not ws_targets:
+            print(
+                "ERR failed to infer docker targets from compose file; "
+                "pass explicit --http-target/--ws-target or expose 9850/9870 host ports."
+            )
+            return 1
+
+    if len(http_targets) != len(ws_targets):
+        print(
+            "ERR docker compose target mismatch: "
+            f"http_targets={len(http_targets)} ws_targets={len(ws_targets)}"
+        )
+        return 1
+
+    if len(http_targets) != expected_node_count:
+        print(
+            "ERR docker compose topology does not match intent scope: "
+            f"expected_nodes={expected_node_count} inferred_http_targets={len(http_targets)} "
+            f"compose_file={compose_file}. "
+            "Use a matching compose file (for example docker/starcoin-4node.compose.yml for 4-node intents) "
+            "or override with --node-count plus matching --http-target/--ws-target."
+        )
+        return 1
 
     out = write_compiled_outputs(
         out_dir=generated_dir,
@@ -158,7 +184,7 @@ def _cmd_run_docker(args: argparse.Namespace) -> int:
     summary = run_docker_scenario(
         intent=intent,
         run_dir=run_dir,
-        compose_file=Path(args.compose_file),
+        compose_file=compose_file,
         project_name=args.project_name,
         http_targets=http_targets,
         ws_targets=ws_targets,
@@ -241,8 +267,6 @@ def build_parser() -> argparse.ArgumentParser:
     docker_cmd.add_argument("--duration-override", type=int, default=None)
     docker_cmd.add_argument("--http-target", action="append", default=[])
     docker_cmd.add_argument("--ws-target", action="append", default=[])
-    docker_cmd.add_argument("--http-base-port", type=int, default=19850)
-    docker_cmd.add_argument("--ws-base-port", type=int, default=19870)
     docker_cmd.add_argument("--tls-insecure", action="store_true")
     docker_cmd.add_argument("--skip-artillery", action="store_true")
     docker_cmd.add_argument("--keep-running", action="store_true")

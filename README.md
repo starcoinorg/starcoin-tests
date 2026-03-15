@@ -71,13 +71,13 @@ python3 -m framework.cli run intents/10-tls-pubsub.md \
   --duration-override 60
 
 python3 -m framework.cli run-docker intents/01-baseline.md \
-  --compose-file docker/starcoin-3node.compose.yml \
+  --compose-file docker/starcoin-4node.compose.yml \
   --project-name starcoin-nettest \
   --duration-override 60
 
 # wrapper script
 ./scripts/run_docker_intent.sh intents/01-baseline.md \
-  --compose-file docker/starcoin-3node.compose.yml \
+  --compose-file docker/starcoin-4node.compose.yml \
   --duration-override 60
 
 # wrapper script
@@ -133,17 +133,17 @@ Run outputs:
 
 Defaults:
 
-1. If `--http-target` or `--ws-target` are omitted, the command infers local endpoints from the bundled template:
-   - HTTP: `http://127.0.0.1:19850`, `19851`, `19852`, ...
-   - WS: `ws://127.0.0.1:19870`, `19871`, `19872`, ...
+1. If `--http-target` or `--ws-target` are omitted, the command infers local endpoints from the compose file's published `9850` / `9870` ports.
 2. First endpoint is used as the primary target for load and PubSub execution.
 3. All configured HTTP endpoints are included in docker pre/post snapshots.
+4. The inferred endpoint count must match `--node-count` or the intent's `scope.nodes`; otherwise `run-docker` fails fast with a topology mismatch error.
 
 Useful options:
 
 1. `--keep-running`: leave the compose stack up after the run.
 2. `--remove-volumes`: delete compose volumes on teardown.
 3. `--http-target` / `--ws-target`: override inferred endpoints for custom compose files.
+4. Use `docker/starcoin-4node.compose.yml` for the default 4-node intents; keep `docker/starcoin-3node.compose.yml` for explicit 3-node runs with `--node-count 3`.
 
 ## Notes
 

@@ -1,0 +1,78 @@
+services:
+  node1:
+    image: ${STARCOIN_IMAGE:-starcoin:v2.9}
+    command: >-
+      /starcoin/starcoin
+      -n dag:24
+      --discover-local true
+      --genesis-config halley
+      -d /starcoin/data
+    ports:
+      - "19840:9840"
+      - "19850:9850"
+      - "19870:9870"
+    volumes:
+      - node1_data:/starcoin/data
+    networks:
+      - starcoin_net
+
+  node2:
+    image: ${STARCOIN_IMAGE:-starcoin:v2.9}
+    command: >-
+      /starcoin/starcoin
+      -n dag:24
+      --discover-local true
+      --genesis-config halley
+      -d /starcoin/data
+    ports:
+      - "19841:9840"
+      - "19851:9850"
+      - "19871:9870"
+    volumes:
+      - node2_data:/starcoin/data
+    networks:
+      - starcoin_net
+
+  node3:
+    image: ${STARCOIN_IMAGE:-starcoin:v2.9}
+    command: >-
+      /starcoin/starcoin
+      -n dag:24
+      --discover-local true
+      --genesis-config halley
+      -d /starcoin/data
+    ports:
+      - "19842:9840"
+      - "19852:9850"
+      - "19872:9870"
+    volumes:
+      - node3_data:/starcoin/data
+    networks:
+      - starcoin_net
+
+  node4:
+    image: ${STARCOIN_IMAGE:-starcoin:v2.9}
+    command: >-
+      /starcoin/starcoin
+      -n dag:24
+      --discover-local true
+      --genesis-config halley
+      -d /starcoin/data
+    ports:
+      - "19843:9840"
+      - "19853:9850"
+      - "19873:9870"
+    volumes:
+      - node4_data:/starcoin/data
+    networks:
+      - starcoin_net
+
+networks:
+  starcoin_net:
+    driver: bridge
+
+volumes:
+  node1_data:
+  node2_data:
+  node3_data:
+  node4_data:

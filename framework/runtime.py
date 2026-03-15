@@ -191,6 +191,28 @@ def _default_docker_ws_targets(node_count: int, base_port: int = 19870) -> list[
     return [f"ws://127.0.0.1:{base_port + index}" for index in range(node_count)]
 
 
+def infer_compose_published_targets(compose_file: Path) -> tuple[list[str], list[str]]:
+    if not compose_file.is_file():
+        raise FileNotFoundError(f"compose file not found: {compose_file}")
+
+    http_targets: list[str] = []
+    ws_targets: list[str] = []
+    port_pattern = re.compile(r'["\']?(\d+):(9850|9870)["\']?')
+
+    for line in compose_file.read_text(encoding="utf-8").splitlines():
+        match = port_pattern.search(line)
+        if not match:
+            continue
+        host_port = int(match.group(1))
+        container_port = match.group(2)
+        if container_port == "9850":
+            http_targets.append(f"http://127.0.0.1:{host_port}")
+        elif container_port == "9870":
+            ws_targets.append(f"ws://127.0.0.1:{host_port}")
+
+    return http_targets, ws_targets
+
+
 def _derive_cluster_snapshot_metrics(
     pre_snapshot: dict[str, Any],
     post_snapshot: dict[str, Any],

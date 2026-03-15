@@ -40,6 +40,6 @@ Notes:
    - local binary mode cannot expose HTTPS/WSS directly
    - add `--tls-insecure` only for self-signed test environments
 9. Docker smoke path example:
-   - `python3 -m framework.cli run-docker intents/01-baseline.md --compose-file docker/starcoin-3node.compose.yml --duration-override 60`
-   - default inferred endpoints are `19850/19851/19852` for HTTP and `19870/19871/19872` for WS
+   - `python3 -m framework.cli run-docker intents/01-baseline.md --compose-file docker/starcoin-4node.compose.yml --duration-override 60`
+   - default inferred endpoints come from the compose file's published `9850`/`9870` host ports
    - use `--keep-running` when you want to inspect the cluster after the scenario
