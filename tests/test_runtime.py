@@ -2,6 +2,9 @@ import unittest
 
 from framework.models import Fault, IntentScenario, Scope, Traffic
 from framework.runtime import EndpointObserver
+from framework.runtime import _default_docker_http_targets
+from framework.runtime import _default_docker_ws_targets
+from framework.runtime import _derive_cluster_snapshot_metrics
 from framework.runtime import _derive_endpoint_metrics
 from framework.runtime import _derive_load_metrics
 from framework.runtime import _derive_pubsub_probe_metrics
@@ -92,6 +95,48 @@ websocket.messages_sent: .......................................................
         self.assertEqual(metrics["chain_progress"], True)
         self.assertEqual(metrics["height_delta"], 4)
         self.assertEqual(metrics["rpc_success_rate"], 90.0)
+
+    def test_default_docker_targets(self) -> None:
+        self.assertEqual(
+            _default_docker_http_targets(3),
+            [
+                "http://127.0.0.1:19850",
+                "http://127.0.0.1:19851",
+                "http://127.0.0.1:19852",
+            ],
+        )
+        self.assertEqual(
+            _default_docker_ws_targets(3),
+            [
+                "ws://127.0.0.1:19870",
+                "ws://127.0.0.1:19871",
+                "ws://127.0.0.1:19872",
+            ],
+        )
+
+    def test_derive_cluster_snapshot_metrics(self) -> None:
+        metrics = _derive_cluster_snapshot_metrics(
+            pre_snapshot={
+                "nodes": [
+                    {"status": "ok", "height": 4, "peer_count": 2},
+                    {"status": "ok", "height": 5, "peer_count": 1},
+                    {"status": "failed", "height": None, "peer_count": None},
+                ]
+            },
+            post_snapshot={
+                "nodes": [
+                    {"status": "ok", "height": 8, "peer_count": 2},
+                    {"status": "ok", "height": 9, "peer_count": 2},
+                    {"status": "ok", "height": 8, "peer_count": 2},
+                ]
+            },
+        )
+        self.assertEqual(metrics["cluster_min_peer_count_pre"], 1)
+        self.assertEqual(metrics["cluster_ready_nodes_pre"], 2)
+        self.assertEqual(metrics["cluster_min_peer_count_post"], 2)
+        self.assertEqual(metrics["cluster_ready_nodes_post"], 3)
+        self.assertEqual(metrics["cluster_chain_progress"], True)
+        self.assertEqual(metrics["cluster_height_delta"], 4)
 
 
 if __name__ == "__main__":

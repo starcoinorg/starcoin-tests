@@ -1,12 +1,18 @@
 # Starcoin Command Integration
 
-This framework integrates with Starcoin in two ways during `run`:
+This framework integrates with Starcoin in three ways:
 
-1. JSON-RPC calls over HTTP for machine-readable checks:
+1. Binary runner during `run`:
+   - starts a local multi-node Starcoin cluster from a compiled `starcoin` binary
+2. Docker compose runner during `run-docker`:
+   - starts a compose-managed Starcoin cluster
+   - waits for configured HTTP RPC endpoints
+   - reuses the same intent compilation, Artillery, and PubSub probe flow
+3. JSON-RPC calls over HTTP for machine-readable checks:
    - `chain.info`
    - `node.info`
    - `node.peers`
-2. Raw `starcoin` CLI command snapshots for operator audit:
+4. Raw `starcoin` CLI command snapshots for operator audit:
    - `starcoin -c ws://127.0.0.1:<port> chain info`
    - `starcoin -c ws://127.0.0.1:<port> node peers`
 
@@ -33,3 +39,7 @@ Notes:
    - `python3 -m framework.cli run intents/10-tls-pubsub.md --http-target https://... --ws-target wss://...`
    - local binary mode cannot expose HTTPS/WSS directly
    - add `--tls-insecure` only for self-signed test environments
+9. Docker smoke path example:
+   - `python3 -m framework.cli run-docker intents/01-baseline.md --compose-file docker/starcoin-3node.compose.yml --duration-override 60`
+   - default inferred endpoints are `19850/19851/19852` for HTTP and `19870/19871/19872` for WS
+   - use `--keep-running` when you want to inspect the cluster after the scenario

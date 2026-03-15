@@ -45,11 +45,12 @@ Use the built-in script to check or install prerequisites:
 
 The script detects OS and prepares:
 
-1. Common tools: `python3`, `node`, `npm`, `artillery`
+1. Common tools: `python3`, `node`, `npm`, `artillery`, `docker`
 2. Network fault backend:
    - Linux: `tc` (`iproute2`)
    - macOS: `dnctl + pfctl`
-3. Starcoin binary existence (`--starcoin-bin` optional)
+3. Docker compose availability (`docker compose` or `docker-compose`)
+4. Starcoin binary existence (`--starcoin-bin` optional)
 
 ## Commands
 
@@ -67,6 +68,16 @@ python3 -m framework.cli run intents/02-node-down.md \
 python3 -m framework.cli run intents/10-tls-pubsub.md \
   --http-target https://rpc.example.com \
   --ws-target wss://rpc.example.com/ws \
+  --duration-override 60
+
+python3 -m framework.cli run-docker intents/01-baseline.md \
+  --compose-file docker/starcoin-3node.compose.yml \
+  --project-name starcoin-nettest \
+  --duration-override 60
+
+# wrapper script
+./scripts/run_docker_intent.sh intents/01-baseline.md \
+  --compose-file docker/starcoin-3node.compose.yml \
   --duration-override 60
 
 # wrapper script
@@ -109,6 +120,30 @@ Run outputs:
 - `runs/<timestamp>-<intent-id>/snapshots/post/*`
 - `runs/<timestamp>-<intent-id>/pubsub-probe.json`
 - `runs/<timestamp>-<intent-id>/run-summary.json`
+
+## Docker Compose Run
+
+`run-docker` does:
+
+1. Start a docker compose cluster.
+2. Wait for all configured HTTP RPC endpoints to answer `chain.info`.
+3. Reuse the existing remote runner for intent compilation, Artillery, PubSub probe, and threshold evaluation.
+4. Capture docker-cluster snapshots for every configured node before and after the run.
+5. Tear the compose stack down by default.
+
+Defaults:
+
+1. If `--http-target` or `--ws-target` are omitted, the command infers local endpoints from the bundled template:
+   - HTTP: `http://127.0.0.1:19850`, `19851`, `19852`, ...
+   - WS: `ws://127.0.0.1:19870`, `19871`, `19872`, ...
+2. First endpoint is used as the primary target for load and PubSub execution.
+3. All configured HTTP endpoints are included in docker pre/post snapshots.
+
+Useful options:
+
+1. `--keep-running`: leave the compose stack up after the run.
+2. `--remove-volumes`: delete compose volumes on teardown.
+3. `--http-target` / `--ws-target`: override inferred endpoints for custom compose files.
 
 ## Notes
 

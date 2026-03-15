@@ -225,6 +225,18 @@ install_artillery_if_needed() {
   fi
 }
 
+check_docker_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    log_ok "Found command: docker compose"
+    return
+  fi
+  if cmd_exists docker-compose; then
+    log_ok "Found command: docker-compose"
+    return
+  fi
+  log_warn "Missing docker compose (docker compose or docker-compose)"
+}
+
 check_starcoin_bin() {
   local target="$1"
   if [ -z "$target" ]; then
@@ -340,6 +352,8 @@ main() {
     check_or_install_cmd "node" "$pm" "nodejs"
     check_or_install_cmd "npm" "$pm" "npm"
   fi
+  check_or_install_cmd "docker" "$pm" "docker"
+  check_docker_compose
   install_artillery_if_needed
 
   if [ "$os" = "linux" ]; then

@@ -183,6 +183,105 @@ class EndpointObserver:
             self._thread.join(timeout=5)
 
 
+def _default_docker_http_targets(node_count: int, base_port: int = 19850) -> list[str]:
+    return [f"http://127.0.0.1:{base_port + index}" for index in range(node_count)]
+
+
+def _default_docker_ws_targets(node_count: int, base_port: int = 19870) -> list[str]:
+    return [f"ws://127.0.0.1:{base_port + index}" for index in range(node_count)]
+
+
+def _derive_cluster_snapshot_metrics(
+    pre_snapshot: dict[str, Any],
+    post_snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    pre_nodes = pre_snapshot.get("nodes", [])
+    post_nodes = post_snapshot.get("nodes", [])
+    if pre_nodes:
+        peer_counts = [
+            int(node["peer_count"])
+            for node in pre_nodes
+            if isinstance(node.get("peer_count"), int)
+        ]
+        if peer_counts:
+            metrics["cluster_min_peer_count_pre"] = min(peer_counts)
+        metrics["cluster_ready_nodes_pre"] = sum(1 for node in pre_nodes if node.get("status") == "ok")
+    if post_nodes:
+        peer_counts = [
+            int(node["peer_count"])
+            for node in post_nodes
+            if isinstance(node.get("peer_count"), int)
+        ]
+        if peer_counts:
+            metrics["cluster_min_peer_count_post"] = min(peer_counts)
+        metrics["cluster_ready_nodes_post"] = sum(
+            1 for node in post_nodes if node.get("status") == "ok"
+        )
+    pre_heights = [
+        int(node["height"]) for node in pre_nodes if isinstance(node.get("height"), int)
+    ]
+    post_heights = [
+        int(node["height"]) for node in post_nodes if isinstance(node.get("height"), int)
+    ]
+    if pre_heights and post_heights:
+        metrics["cluster_chain_progress"] = max(post_heights) > max(pre_heights)
+        metrics["cluster_height_delta"] = max(post_heights) - max(pre_heights)
+    return metrics
+
+
+class DockerComposeStack:
+    def __init__(self, compose_file: Path, project_name: str) -> None:
+        self.compose_file = compose_file
+        self.project_name = project_name
+        self.compose_cmd = self._detect_compose_cmd()
+
+    @staticmethod
+    def _detect_compose_cmd() -> list[str]:
+        modern = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if modern.returncode == 0:
+            return ["docker", "compose"]
+        legacy = shutil.which("docker-compose")
+        if legacy is not None:
+            return [legacy]
+        raise RuntimeError("docker compose is not available")
+
+    def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+        cmd = [*self.compose_cmd, "-f", str(self.compose_file), "-p", self.project_name, *args]
+        return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+    def up(self) -> None:
+        self._run(["up", "-d", "--remove-orphans"])
+
+    def down(self, volumes: bool = False) -> None:
+        args = ["down", "--remove-orphans"]
+        if volumes:
+            args.append("--volumes")
+        self._run(args, check=False)
+
+    def ps(self) -> dict[str, Any]:
+        out = self._run(["ps", "--format", "json"], check=False)
+        if out.returncode != 0:
+            return {"returncode": out.returncode, "stdout": out.stdout, "stderr": out.stderr}
+        lines = [line for line in out.stdout.splitlines() if line.strip()]
+        rows = []
+        for line in lines:
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                rows.append({"raw": line})
+        return {"returncode": out.returncode, "services": rows}
+
+    def logs(self, tail: int = 200) -> dict[str, Any]:
+        out = self._run(["logs", f"--tail={tail}"], check=False)
+        return {"returncode": out.returncode, "stdout": out.stdout, "stderr": out.stderr}
+
+
 def _extract_peer_target(intent: IntentScenario) -> int:
     for threshold in intent.thresholds:
         if threshold.metric == "peer_count_after_recovery":
@@ -857,6 +956,87 @@ def snapshot_remote_endpoint(
     return {"errors": errors}
 
 
+def snapshot_remote_cluster_endpoints(
+    http_targets: list[str],
+    snapshot_dir: Path,
+    insecure_tls: bool = False,
+) -> dict[str, Any]:
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    errors: list[dict[str, Any]] = []
+    nodes: list[dict[str, Any]] = []
+    for index, http_target in enumerate(http_targets, start=1):
+        node_data: dict[str, Any] = {
+            "index": index,
+            "http_target": http_target,
+            "status": "ok",
+            "height": None,
+            "peer_count": None,
+        }
+        try:
+            chain_info = _rpc_call_url(
+                http_target,
+                "chain.info",
+                insecure_tls=insecure_tls,
+                timeout_seconds=5.0,
+            )
+            peers = _rpc_call_url(
+                http_target,
+                "node.peers",
+                insecure_tls=insecure_tls,
+                timeout_seconds=5.0,
+            )
+            head = chain_info.get("result", {}).get("head", {})
+            node_data["height"] = int(head["number"]) if "number" in head else None
+            node_data["peer_count"] = len(peers.get("result", []))
+            (snapshot_dir / f"node{index}.chain_info.json").write_text(
+                json.dumps(chain_info, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            (snapshot_dir / f"node{index}.peers.json").write_text(
+                json.dumps(peers, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:  # pragma: no cover - integration branch
+            node_data["status"] = "failed"
+            node_data["error"] = str(exc)
+            errors.append({"index": index, "target": http_target, "error": str(exc)})
+            (snapshot_dir / f"node{index}.rpc-error.json").write_text(
+                json.dumps(node_data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        nodes.append(node_data)
+    return {"errors": errors, "nodes": nodes}
+
+
+def _wait_remote_targets_ready(
+    http_targets: list[str],
+    timeout_seconds: int = 180,
+    insecure_tls: bool = False,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    pending = list(http_targets)
+    last_error: dict[str, str] = {}
+    while time.time() < deadline and pending:
+        next_pending: list[str] = []
+        for http_target in pending:
+            try:
+                _rpc_call_url(
+                    http_target,
+                    "chain.info",
+                    insecure_tls=insecure_tls,
+                    timeout_seconds=5.0,
+                )
+            except Exception as exc:  # pragma: no cover - integration branch
+                last_error[http_target] = str(exc)
+                next_pending.append(http_target)
+        if not next_pending:
+            return
+        pending = next_pending
+        time.sleep(2.0)
+    if pending:
+        raise TimeoutError(f"rpc not ready for targets={pending}, last_error={last_error}")
+
+
 def run_fault_injection(cluster: StarcoinCluster, intent: IntentScenario) -> dict[str, Any]:
     fault = intent.fault.type
     params = intent.fault.params
@@ -1396,6 +1576,85 @@ def run_remote_scenario(
             except subprocess.TimeoutExpired:
                 pubsub_probe_proc.kill()
                 pubsub_probe_proc.wait(timeout=5)
+
+
+def run_docker_scenario(
+    intent: IntentScenario,
+    run_dir: Path,
+    compose_file: Path,
+    project_name: str,
+    http_targets: list[str],
+    ws_targets: list[str],
+    artillery_config_path: Path,
+    skip_artillery: bool = False,
+    duration_override_seconds: int | None = None,
+    insecure_tls: bool = False,
+    keep_running: bool = False,
+    remove_volumes: bool = False,
+) -> dict[str, Any]:
+    if not http_targets:
+        raise ValueError("http_targets must not be empty")
+    if not ws_targets:
+        raise ValueError("ws_targets must not be empty")
+    if len(http_targets) != len(ws_targets):
+        raise ValueError("http_targets and ws_targets must have the same length")
+
+    stack = DockerComposeStack(compose_file=compose_file, project_name=project_name)
+    summary: dict[str, Any] = {
+        "intent_id": intent.id,
+        "mode": "docker",
+        "run_dir": str(run_dir),
+        "docker": {
+            "compose_file": str(compose_file),
+            "project_name": project_name,
+            "http_targets": http_targets,
+            "ws_targets": ws_targets,
+        },
+    }
+
+    try:
+        stack.up()
+        _wait_remote_targets_ready(http_targets=http_targets, insecure_tls=insecure_tls)
+        pre_cluster = snapshot_remote_cluster_endpoints(
+            http_targets=http_targets,
+            snapshot_dir=run_dir / "snapshots" / "docker-pre",
+            insecure_tls=insecure_tls,
+        )
+        remote_summary = run_remote_scenario(
+            intent=intent,
+            run_dir=run_dir,
+            http_target=http_targets[0],
+            ws_target=ws_targets[0],
+            artillery_config_path=artillery_config_path,
+            skip_artillery=skip_artillery,
+            duration_override_seconds=duration_override_seconds,
+            insecure_tls=insecure_tls,
+        )
+        post_cluster = snapshot_remote_cluster_endpoints(
+            http_targets=http_targets,
+            snapshot_dir=run_dir / "snapshots" / "docker-post",
+            insecure_tls=insecure_tls,
+        )
+        docker_metrics = _derive_cluster_snapshot_metrics(pre_cluster, post_cluster)
+        remote_summary["mode"] = "docker"
+        remote_summary["docker"] = {
+            **summary["docker"],
+            "ps": stack.ps(),
+            "pre_cluster": pre_cluster,
+            "post_cluster": post_cluster,
+        }
+        remote_summary.setdefault("metrics", {})
+        remote_summary["metrics"].update(docker_metrics)
+        if pre_cluster.get("errors") or post_cluster.get("errors"):
+            remote_summary["status"] = "failed"
+            remote_summary["error"] = (
+                "docker cluster snapshot failed: "
+                f"pre={pre_cluster.get('errors')}, post={post_cluster.get('errors')}"
+            )
+        return remote_summary
+    finally:
+        if not keep_running:
+            stack.down(volumes=remove_volumes)
 
 
 def run_integrated_scenario(

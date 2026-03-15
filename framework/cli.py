@@ -6,6 +6,9 @@ from pathlib import Path
 from datetime import datetime
 
 from .compiler import write_compiled_outputs
+from .runtime import _default_docker_http_targets
+from .runtime import _default_docker_ws_targets
+from .runtime import run_docker_scenario
 from .runtime import run_integrated_scenario
 from .runtime import run_remote_scenario
 from .translator import load_intent
@@ -125,6 +128,60 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run_docker(args: argparse.Namespace) -> int:
+    intent_path = Path(args.intent_file)
+    intent = load_intent(intent_path)
+    if args.fault_duration is not None:
+        intent.fault.params["duration_seconds"] = int(args.fault_duration)
+
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_dir = Path(args.run_dir) / f"{run_id}-{intent.id}"
+    generated_dir = run_dir / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+
+    http_targets = args.http_target or _default_docker_http_targets(
+        int(args.node_count or intent.scope.nodes),
+        base_port=int(args.http_base_port),
+    )
+    ws_targets = args.ws_target or _default_docker_ws_targets(
+        int(args.node_count or intent.scope.nodes),
+        base_port=int(args.ws_base_port),
+    )
+
+    out = write_compiled_outputs(
+        out_dir=generated_dir,
+        intent=intent,
+        http_target=http_targets[0],
+        ws_target=ws_targets[0],
+    )
+
+    summary = run_docker_scenario(
+        intent=intent,
+        run_dir=run_dir,
+        compose_file=Path(args.compose_file),
+        project_name=args.project_name,
+        http_targets=http_targets,
+        ws_targets=ws_targets,
+        artillery_config_path=out["artillery"],
+        skip_artillery=bool(args.skip_artillery),
+        duration_override_seconds=args.duration_override,
+        insecure_tls=bool(args.tls_insecure),
+        keep_running=bool(args.keep_running),
+        remove_volumes=bool(args.remove_volumes),
+    )
+
+    summary_path = run_dir / "run-summary.json"
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"RUN_DIR {run_dir}")
+    print(f"SUMMARY {summary_path}")
+    print(f"STATUS {summary.get('status')}")
+    if summary.get("status") != "ok":
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="starcoin nettest intent framework")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -170,6 +227,27 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--tls-insecure", action="store_true")
     run_cmd.add_argument("--skip-artillery", action="store_true")
     run_cmd.set_defaults(func=_cmd_run)
+
+    docker_cmd = sub.add_parser(
+        "run-docker",
+        help="run one intent end-to-end against a docker compose managed cluster",
+    )
+    docker_cmd.add_argument("intent_file")
+    docker_cmd.add_argument("--compose-file", required=True)
+    docker_cmd.add_argument("--project-name", default="starcoin-nettest")
+    docker_cmd.add_argument("--run-dir", default="runs")
+    docker_cmd.add_argument("--node-count", type=int, default=None)
+    docker_cmd.add_argument("--fault-duration", type=int, default=None)
+    docker_cmd.add_argument("--duration-override", type=int, default=None)
+    docker_cmd.add_argument("--http-target", action="append", default=[])
+    docker_cmd.add_argument("--ws-target", action="append", default=[])
+    docker_cmd.add_argument("--http-base-port", type=int, default=19850)
+    docker_cmd.add_argument("--ws-base-port", type=int, default=19870)
+    docker_cmd.add_argument("--tls-insecure", action="store_true")
+    docker_cmd.add_argument("--skip-artillery", action="store_true")
+    docker_cmd.add_argument("--keep-running", action="store_true")
+    docker_cmd.add_argument("--remove-volumes", action="store_true")
+    docker_cmd.set_defaults(func=_cmd_run_docker)
 
     return parser
 
